@@ -58,20 +58,46 @@ mmap_data_release(struct mmap_data *md) {
 
 int
 main(int argc, char **argv) {
+	const char *file_path;
+	int width, height, fullscreen = 0;
+	switch (argc) {
+	case 2:
+		file_path = argv[1];
+		fullscreen = 1;
+		break;
+	case 4:
+		width = atoi(argv[1]);
+		height = atoi(argv[2]);
+		file_path = argv[3];
+		if (width > 0 && height > 0) {
+			break;
+		}
+		puts("width and height must be positive integers");
+	default:
+		puts("usage:\n"
+		    "- fullscreen:\tbitmuncher file\n"
+		    "- window:\tbitmuncher width height file");
+		return 0;
+	}
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
 		fprintf(stderr, "Error initializing SDL: %s\n", SDL_GetError());
 		return 1;
 	}
 	struct mmap_data md;
-	if (mmap_data_init(&md, argv[1])) {
+	if (mmap_data_init(&md, file_path)) {
 		SDL_Quit();
 		return 1;
 	}
-	unsigned width = 640, height = 480, fullscreen = 1;
 	SDL_Window *window;
+	SDL_DisplayMode dm;
+	if (SDL_GetCurrentDisplayMode(0, &dm)) {
+		fprintf(stderr, "SDL_GetDisplayMode failed: %s", SDL_GetError());
+		mmap_data_release(&md);
+		SDL_Quit();
+		return 1;
+	}
+	int bytes_per_pixel = SDL_BYTESPERPIXEL(dm.format);
 	if (fullscreen) {
-		SDL_DisplayMode dm;
-		SDL_GetCurrentDisplayMode(0, &dm);
 		window = SDL_CreateWindow("Bit muncher",
 		    SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 		    dm.w, dm.h, SDL_WINDOW_FULLSCREEN);
@@ -105,8 +131,8 @@ main(int argc, char **argv) {
 		}
 		SDL_LockSurface(window_surface);
 		unsigned char *pixels = window_surface->pixels;
-		for (size_t i = 0; i < total_pixels; i += 4) {
-			memset(pixels + i, ((md.data[byte_i] & (1 << bit_i++)) != 0) * 0xFF, 4);
+		for (size_t i = 0; i < total_pixels; i += bytes_per_pixel) {
+			memset(pixels + i, ((md.data[byte_i] & (1 << bit_i++)) != 0) * 0xFF, bytes_per_pixel);
 			bit_i %= 8;
 			byte_i = (byte_i + !bit_i) % md.size;
 		}
